@@ -6,9 +6,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from shared import Actor
 from shared.models import DecoyId
 
-from . import db, hub, rds
+from . import db, hub, rds, scoring
 
 AGENT_URL = os.environ.get("AGENT_URL", "http://agent:8004")
 
@@ -73,7 +74,9 @@ async def release(actor_id: str):
         raise HTTPException(404, "actor not found")
     if targets:
         await rds.client.delete(*(rds.quarantine_key(k, v) for k, v in targets))
-    await hub.broadcast("actor_update", {"id": actor_id, "status": "released"})
+    scoring.forget(actor_id)
+    released = Actor.model_validate(await db.get_actor(actor_id))
+    await hub.broadcast("actor_update", released.model_dump(mode="json"))
     return {"id": actor_id, "status": "released", "released_keys": len(targets)}
 
 
@@ -109,6 +112,8 @@ async def demo_reset():
     keys = [k async for k in rds.client.scan_iter(match=rds.QUARANTINE_PREFIX + "*", count=500)]
     if keys:
         await rds.client.delete(*keys)
+    await rds.client.delete(rds.ACTOR_SEQ_KEY)
+    scoring.reset()
     await hub.broadcast("reset", None)
     await push_stats()
     return {"ok": True, "quarantine_keys_cleared": len(keys)}
