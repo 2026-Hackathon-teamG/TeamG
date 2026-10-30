@@ -23,13 +23,17 @@ async def shutdown() -> None:
 
 
 async def forward(request: Request) -> Response:
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in _SKIP}
-    upstream = await _client.request(
-        request.method,
-        request.url.path,
-        params=request.query_params,
-        headers=headers,
-        content=await request.body(),
-    )
+    # 한글 같은 비 ASCII 헤더 값도 그대로 넘기도록 bytes 상태로 전달
+    headers = [(k, v) for k, v in request.headers.raw if k.decode().lower() not in _SKIP]
+    try:
+        upstream = await _client.request(
+            request.method,
+            request.url.path,
+            params=request.query_params,
+            headers=headers,
+            content=await request.body(),
+        )
+    except httpx.HTTPError:
+        return Response("bad gateway", status_code=502)
     out_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _SKIP}
     return Response(upstream.content, status_code=upstream.status_code, headers=out_headers)

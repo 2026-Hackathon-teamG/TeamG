@@ -1,6 +1,24 @@
+import asyncio
+import contextlib
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-app = FastAPI(title="detector")
+from . import db, worker
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await db.startup()
+    task = asyncio.create_task(worker.run())
+    yield
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    await db.shutdown()
+
+
+app = FastAPI(title="detector", lifespan=lifespan)
 
 
 @app.get("/healthz")
