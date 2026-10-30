@@ -65,6 +65,21 @@ class IPRotator:
         return False
 
 
+def encode_headers(headers: dict) -> dict:
+    """한글 등 비 ascii 헤더 값을 UTF-8 bytes로 보낸다. httpx가 헤더를 ascii로 인코딩하다
+    깨지는 것을 피한다. gateway는 이 바이트를 latin-1로 받아 UTF-8로 되살린다(events.agent_note).
+    기록·재생용 dict는 문자열 그대로 두고, 전송 직전에만 이 함수를 쓴다."""
+    out = {}
+    for key, value in headers.items():
+        if isinstance(value, str):
+            try:
+                value.encode("ascii")
+            except UnicodeEncodeError:
+                value = value.encode("utf-8")
+        out[key] = value
+    return out
+
+
 def _send(
     client: httpx.Client,
     ip_rotator: IPRotator,
@@ -87,7 +102,7 @@ def _send(
         response = client.request(
             method,
             path,
-            headers=headers,
+            headers=encode_headers(headers),
             json=body if method == "POST" else None,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
