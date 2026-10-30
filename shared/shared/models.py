@@ -26,7 +26,7 @@ class Event(BaseModel):
     internal_header: bool = False   # X-Internal-Request 헤더 포함 여부
     login_result: Literal["success", "fail", "step_up"] | None = None  # 로그인 결과. step_up=비번은 맞지만 추가 인증 필요(R5)
     account: str | None = None      # 로그인 등 시도 대상 계정
-
+    mfa_action: Literal["request", "approve"] | None = None  # MFA 요청/승인 구분 (detector의 R6 채점용)
 
 class Actor(BaseModel):
     id: str                  # "A-01", "A-02" ...
