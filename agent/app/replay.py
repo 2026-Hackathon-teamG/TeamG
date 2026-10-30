@@ -19,6 +19,24 @@ import httpx
 from app.config import AGENT_TARGET, REQUEST_TIMEOUT_SECONDS, RUNS_DIR
 
 
+def latest_run_file(runs_dir: str = RUNS_DIR) -> str | None:
+    """끝까지 녹화된(end 줄이 있는) run 중 가장 최근 파일 이름. 없으면 None.
+
+    관제 화면은 파일 이름 없이 replay를 요청하므로 이걸 기본값으로 쓴다.
+    중간에 실패한 live run은 end 줄이 없어서 건너뛴다.
+    파일 이름이 UTC 타임스탬프라 이름순 정렬이 곧 시간순이다.
+    """
+    if not os.path.isdir(runs_dir):
+        return None
+    for name in sorted(os.listdir(runs_dir), reverse=True):
+        if not name.endswith(".jsonl"):
+            continue
+        with open(os.path.join(runs_dir, name), encoding="utf-8") as f:
+            if any(json.loads(line).get("type") == "end" for line in f if line.strip()):
+                return name
+    return None
+
+
 def _load_steps(run_file: str) -> tuple[dict, list[dict]]:
     """run_file(.jsonl)을 읽어서 (meta, step 목록)을 돌려준다."""
     meta = None

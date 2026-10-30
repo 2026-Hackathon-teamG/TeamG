@@ -62,52 +62,56 @@ def run_live() -> dict:
     final_text = ""
     step = 0
 
-    with httpx.Client(base_url=AGENT_TARGET) as http_client:
-        while step < MAX_STEPS:
-            response = anthropic_client.messages.create(
-                model=ANTHROPIC_MODEL,
-                max_tokens=1024,
-                temperature=0,
-                system=SYSTEM_PROMPT,
-                tools=TOOLS,
-                messages=messages,
-            )
-
-            messages.append({"role": "assistant", "content": response.content})
-
-            tool_uses = [block for block in response.content if block.type == "tool_use"]
-
-            if not tool_uses:
-                # 모델이 도구를 더 안 쓰고 텍스트로만 답했다 == 스스로 끝냈다는 뜻.
-                text_blocks = [block.text for block in response.content if block.type == "text"]
-                final_text = "\n".join(text_blocks)
-                break
-
-            tool_results = []
-            for tool_use in tool_uses:
-                step += 1
-                outcome = _run_tool(http_client, ip_rotator, tool_use.name, tool_use.input)
-                recorder.write_outcome(outcome)
-
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": _outcome_to_model_text(outcome),
-                    }
+    try:
+        with httpx.Client(base_url=AGENT_TARGET) as http_client:
+            while step < MAX_STEPS:
+                # temperature는 넘기지 않는다. anthropic SDK 1.x부터 인자 자체가 없어져
+                # 넘기면 TypeError가 난다. 시연이 흔들리면 녹화본 재생(replay)으로 대체한다.
+                response = anthropic_client.messages.create(
+                    model=ANTHROPIC_MODEL,
+                    max_tokens=1024,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    messages=messages,
                 )
 
-                if step >= MAX_STEPS:
+                messages.append({"role": "assistant", "content": response.content})
+
+                tool_uses = [block for block in response.content if block.type == "tool_use"]
+
+                if not tool_uses:
+                    # 모델이 도구를 더 안 쓰고 텍스트로만 답했다 == 스스로 끝냈다는 뜻.
+                    text_blocks = [block.text for block in response.content if block.type == "text"]
+                    final_text = "\n".join(text_blocks)
                     break
 
-            messages.append({"role": "user", "content": tool_results})
+                tool_results = []
+                for tool_use in tool_uses:
+                    step += 1
+                    outcome = _run_tool(http_client, ip_rotator, tool_use.name, tool_use.input)
+                    recorder.write_outcome(outcome)
 
-    # 2. 종료 신호. ops-ui와 rehearsal --agent가 "이 run은 끝났다"를 알 수 있게
-    #    항상 __END__ 노트가 달린 요청을 한 번 더 보낸다.
-    with httpx.Client(base_url=AGENT_TARGET) as http_client:
-        end_outcome = http_get(http_client, ip_rotator, "/", "__END__")
-        recorder.write_outcome(end_outcome)
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": _outcome_to_model_text(outcome),
+                        }
+                    )
 
+                    if step >= MAX_STEPS:
+                        break
+
+                messages.append({"role": "user", "content": tool_results})
+    finally:
+        # 2. 종료 신호. ops-ui와 rehearsal --agent가 "이 run은 끝났다"를 알 수 있게
+        #    항상 __END__ 노트가 달린 요청을 한 번 더 보낸다. 중간에 실패해도 보낸다 —
+        #    안 보내면 관제 화면이 계속 "실행 중"에 머문다.
+        with httpx.Client(base_url=AGENT_TARGET) as http_client:
+            end_outcome = http_get(http_client, ip_rotator, "/", "__END__")
+            recorder.write_outcome(end_outcome)
+
+    # end 줄은 끝까지 돈 run에만 남긴다. replay는 end 줄이 있는 녹화만 고른다.
     recorder.write_end(summary=final_text or "(모델이 요약 없이 최대 스텝에 도달함)")
 
     return {"run_id": recorder.run_id, "steps": step, "final_text": final_text}
