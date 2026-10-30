@@ -3,7 +3,7 @@ from datetime import datetime
 
 import asyncpg
 
-from shared import Event
+from shared import Actor, Event
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://mikki:mikki@postgres:5432/mikki")
 
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
     records_out INT NOT NULL DEFAULT 0,
     agent_note  TEXT
 );
+ALTER TABLE events ADD COLUMN IF NOT EXISTS internal_header BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS events_ts_idx ON events (ts);
 CREATE INDEX IF NOT EXISTS events_ip_idx ON events (ip);
 
@@ -94,6 +95,39 @@ async def insert_events(events: list[Event]) -> None:
         await conn.executemany(_INSERT_EVENT, rows)
 
 
+async def save_actor(actor: Actor, links: list[tuple[str, str]]) -> None:
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute(
+            "INSERT INTO actors (id, status, score, first_seen, last_seen) VALUES ($1, $2, $3, $4, $5) "
+            "ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, "
+            "score = GREATEST(actors.score, EXCLUDED.score), last_seen = EXCLUDED.last_seen",
+            actor.id, actor.status, actor.score, actor.first_seen, actor.last_seen,
+        )
+        # 추정으로 표시됐던 값이 토큰으로 확인되면 확정으로 올림
+        await conn.executemany(
+            "INSERT INTO actor_links (actor_id, kind, value, confidence) VALUES ($1, $2, $3, '확정') "
+            "ON CONFLICT (actor_id, kind, value) DO UPDATE SET confidence = '확정'",
+            [(actor.id, kind, value) for kind, value in links],
+        )
+
+
+async def save_estimated_link(actor_id: str, ip: str) -> None:
+    await pool.execute(
+        "INSERT INTO actor_links (actor_id, kind, value, confidence) VALUES ($1, 'ip', $2, '추정') "
+        "ON CONFLICT DO NOTHING",
+        actor_id, ip,
+    )
+
+
+async def absorb_actor(old_id: str, actor_id: str) -> dict | None:
+    """병합된 공격 주체를 비움. 링크는 병합 대상에 이미 저장되어 있음. 번호가 재사용되지 않게 행은 released로 남김."""
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute("DELETE FROM actor_links WHERE actor_id = $1", old_id)
+        await conn.execute("UPDATE events SET actor_id = $2 WHERE actor_id = $1", old_id, actor_id)
+        row = await conn.fetchrow("UPDATE actors SET status = 'released' WHERE id = $1 RETURNING *", old_id)
+    return dict(row) if row else None
+
+
 # ---------- 관제 API 조회 ----------
 
 async def list_events(since: datetime | None, limit: int) -> list[dict]:
@@ -140,7 +174,8 @@ async def release_actor(actor_id: str) -> list[tuple[str, str]] | None:
         if updated.endswith(" 0"):
             return None
         links = await conn.fetch(
-            "SELECT kind, value FROM actor_links WHERE actor_id = $1 AND kind IN ('ip', 'session', 'token')",
+            "SELECT kind, value FROM actor_links WHERE actor_id = $1 AND kind IN ('ip', 'session', 'token') "
+            "AND confidence = '확정'",
             actor_id,
         )
     return [(r["kind"], r["value"]) for r in links]

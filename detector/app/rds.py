@@ -8,6 +8,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 STREAM = "events"
 DECOYS_KEY = "decoys:enabled"          # hash {decoy_id: "1" | "0"}
 QUARANTINE_PREFIX = "quarantine:"      # quarantine:ip:<ip>, quarantine:session:<id>, quarantine:token:<token>
+ACTOR_SEQ_KEY = "actors:seq"           # INCR로 A-01, A-02 ... 번호 발급
 
 client: aioredis.Redis | None = None
 

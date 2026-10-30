@@ -7,7 +7,7 @@ from redis.exceptions import ResponseError
 
 from shared import Event
 
-from . import db, hub
+from . import db, hub, scoring
 
 log = logging.getLogger(__name__)
 
@@ -39,9 +39,13 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
             log.exception("bad event %s, skipped", msg_id)
     if events:
         await db.insert_events(events)
-        # 다음 단계(점수, 묶음)는 여기서 events를 넘겨받아 처리
         for e in events:
             await hub.broadcast("event", e.model_dump(mode="json"))
+            try:
+                await scoring.process(e)
+            except Exception:
+                # 이벤트 저장과 전송은 계속되게 함. 격리는 다음 이벤트에서 다시 시도됨
+                log.exception("scoring failed: %s", e.id)
         if hub.has_clients():
             await hub.broadcast("stats", await db.stats())
     if ids:
