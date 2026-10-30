@@ -10,11 +10,16 @@ from shared import Actor, Event
 from . import db, hub, linking, rds
 
 THRESHOLD = 60
-SCORES = {"decoy": 60, "hidden_guide": 40, "internal_header": 20, "sequential_ids": 25, "mechanical": 15}
+SCORES = {"decoy": 60, "hidden_guide": 40, "internal_header": 20, "sequential_ids": 25, "mechanical": 15,
+          "login_bruteforce": 60}
 SEQUENTIAL_RUN = 10
 INTERVALS = 20
 MAX_STDEV = 0.2
 PATH_HISTORY = 50
+
+LOGIN_PATH = "/api/v1/login"
+LOGIN_WINDOW = 60.0        # 초. R1: 이 창 안의 실패를 센다
+LOGIN_FAIL_LIMIT = 5       # R1: 60초에 5회면 잠금
 
 
 @dataclass
@@ -35,6 +40,7 @@ class State:
     paths: deque[str] = field(default_factory=lambda: deque(maxlen=PATH_HISTORY))
     suspected: set[str] = field(default_factory=set)    # 이미 추정으로 표시한 공격 주체
     absorbed: set[str] = field(default_factory=set)     # 병합됐지만 아직 DB에서 정리하지 않은 공격 주체
+    login_fails: deque[datetime] = field(default_factory=lambda: deque(maxlen=64))   # 로그인 실패 시각
 
 
 # ponytail: 프로세스 메모리에 둠. 재시작하면 채점이 처음부터 시작되고, 이미 올린 격리 키는 Redis에 남음
@@ -61,6 +67,7 @@ def _merge(target: State, source: State) -> None:
     target.first_seen = min(target.first_seen, source.first_seen)
     target.last_seen = max(target.last_seen, source.last_seen)
     target.absorbed |= source.absorbed
+    target.login_fails = deque(sorted(set(target.login_fails) | set(source.login_fails)), maxlen=64)
     if source.actor_id and source.actor_id != target.actor_id:
         target.absorbed.add(source.actor_id)
     for key in [k for k, v in _states.items() if v is source]:
@@ -127,6 +134,28 @@ async def _decoys_on() -> bool:
     return b"1" in await rds.client.hvals(rds.DECOYS_KEY)
 
 
+def _recent(fails, now: datetime) -> list[datetime]:
+    return [t for t in fails if (now - t).total_seconds() <= LOGIN_WINDOW]
+
+
+def login_bruteforce(state: State, now: datetime) -> bool:
+    """로그인 실패를 기록하고 창 안의 실패 수가 한계를 넘으면 True.
+
+    R1: 상태가 아직 IP 단위라 같은 IP의 실패를 센다.
+    R2: 같은 지문으로 IP를 바꿔 가며 실패하는 상태들을 하나로 합쳐 함께 세므로,
+        IP를 돌려도 주체 단위로 집계된다.
+    """
+    state.login_fails.append(now)
+    for other in list({id(s): s for s in _states.values()}.values()):
+        if other is state or other.fingerprint != state.fingerprint:
+            continue
+        if _recent(other.login_fails, now):
+            _merge(state, other)
+    recent = _recent(state.login_fails, now)
+    state.login_fails = deque(recent, maxlen=64)
+    return len(recent) >= LOGIN_FAIL_LIMIT
+
+
 async def _quarantine(state: State) -> None:
     new_links = state.links - state.saved_links
     changed = bool(new_links or state.absorbed) or state.score != state.saved_score or not state.quarantined
@@ -176,6 +205,14 @@ async def process(e: Event) -> None:
     state.fingerprint = (e.header_hash, e.ua)
     state.paths.append(urlsplit(e.path).path)
     apply(state, e)
+
+    # R1·R2: 로그인 실패 폭주는 미끼 on/off와 무관한 방어 룰이라 바로 잠근다.
+    if urlsplit(e.path).path == LOGIN_PATH and e.status == 401 and login_bruteforce(state, e.ts):
+        state.signals.add("login_bruteforce")
+        state.score = sum(SCORES[s] for s in state.signals)
+        await _quarantine(state)
+        return
+
     if state.actor_id is None:
         await _mark_suspects(state, e.ip)
     if state.score < THRESHOLD and not token_actor:

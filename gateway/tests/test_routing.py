@@ -26,6 +26,8 @@ def bank(request: httpx.Request) -> httpx.Response:
     if path == "/login":
         return httpx.Response(200, headers=[("set-cookie", "sessionid=a; Path=/"),
                                             ("set-cookie", "csrftoken=b; Path=/")])
+    if path == "/api/v1/login":
+        return httpx.Response(200, json={"ok": True, "user": "admin"})
     return httpx.Response(404, text="not found")
 
 
@@ -145,3 +147,20 @@ def test_multiple_set_cookie_kept(ctx):
     r = get(client, "/login", IP_A)
     cookies = [v for k, v in r.headers.multi_items() if k == "set-cookie"]
     assert len(cookies) == 2
+
+
+def test_quarantined_actor_login_is_blocked(ctx):
+    client, set_decoys, last_event = ctx
+    set_decoys(True)
+    get(client, "/admin-legacy", IP_A)   # A-01 격리
+
+    # 격리된 IP의 로그인은 bank(200)에 닿지 못하고 gateway가 401로 막는다 (R2 재공격 차단)
+    blocked = client.post("/api/v1/login", headers={"X-Sim-IP": IP_A},
+                          json={"username": "admin", "password": "admin123"})
+    assert blocked.status_code == 401
+    assert last_event()["routed_to"] == "decoy" and last_event()["actor_id"] == "A-01"
+
+    # 격리 안 된 IP는 그대로 bank로 통과
+    ok = client.post("/api/v1/login", headers={"X-Sim-IP": IP_B},
+                     json={"username": "admin", "password": "admin123"})
+    assert ok.status_code == 200

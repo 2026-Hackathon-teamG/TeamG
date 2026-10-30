@@ -36,3 +36,16 @@ def make_request(*headers: tuple[bytes, bytes]) -> Request:
 def test_internal_header_flag_ignores_value():
     assert events.build(make_request(), 200).internal_header is False
     assert events.build(make_request((b"x-internal-request", b"false")), 200).internal_header is True
+
+
+def test_client_ip_ignores_forwarded_headers(monkeypatch):
+    # R2: 공격자가 보낸 X-Forwarded-For/X-Real-IP로 IP 판단을 바꿀 수 없어야 함
+    monkeypatch.setenv("DEMO_MODE", "0")
+    headers = {"x-forwarded-for": "9.9.9.9", "x-real-ip": "8.8.8.8"}
+    assert events.client_ip(headers, "172.18.0.1") == "172.18.0.1"
+
+
+def test_build_ip_ignores_forwarded_header(monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "0")
+    ev = events.build(make_request((b"x-forwarded-for", b"9.9.9.9")), 200)
+    assert ev.ip == "172.18.0.1"

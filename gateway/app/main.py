@@ -11,6 +11,7 @@ from . import decoys, events, proxy, quarantine
 from .decoys import admin_legacy, docs_bait, endless_export, fake, robots
 
 CUSTOMERS_PATH = "/api/v1/customers"
+LOGIN_PATH = "/api/v1/login"
 
 
 @asynccontextmanager
@@ -63,6 +64,14 @@ async def route(request: Request, gate: quarantine.Gate) -> Outcome:
         await decoys.delay()
         return Outcome(endless_export.respond(actor_id, page_no, quarantine.TOKEN_SECRET),
                        "decoy", endless_export.DECOY_ID, endless_export.PAGE_SIZE)
+
+    # 격리된 공격 주체의 로그인 시도는 bank에 닿지 못하게 막는다(R2 재공격 차단).
+    # 인증 자체를 못 하게 해야 IP·지문을 바꿔 다시 와도 계정 탈취가 안 된다.
+    if gate.actor_id and path == LOGIN_PATH:
+        await decoys.delay()
+        return Outcome(JSONResponse(
+            {"error": "invalid_credentials", "message": "아이디 또는 비밀번호가 올바르지 않습니다."},
+            status_code=401), "decoy")
 
     # 격리된 공격 주체의 고객 조회는 bank 대신 가짜 데이터로
     if gate.actor_id and path == CUSTOMERS_PATH:

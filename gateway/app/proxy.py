@@ -6,9 +6,12 @@ from fastapi import Request, Response
 
 BANK_URL = os.environ.get("BANK_URL", "http://bank:8001")
 
-# hop-by-hop 헤더와 길이·인코딩은 다시 계산되므로 넘기지 않음
+# hop-by-hop 헤더와 길이·인코딩은 다시 계산되므로 넘기지 않음.
+# 클라이언트가 보낸 X-Forwarded-*·X-Real-IP도 버린다(R2): 공격자가 이 헤더로
+# 자기 IP를 속여 bank나 탐지 엔진의 IP 판단을 흔들지 못하게 한다.
 _SKIP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
-         "proxy-authorization", "proxy-authenticate", "host", "content-length", "content-encoding", "date", "server"}
+         "proxy-authorization", "proxy-authenticate", "host", "content-length", "content-encoding", "date", "server",
+         "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip"}
 
 _client: httpx.AsyncClient | None = None
 

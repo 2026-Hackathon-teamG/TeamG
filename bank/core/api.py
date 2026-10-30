@@ -1,13 +1,31 @@
 """한결은행 공개 API. 시연용 취약점을 일부러 남겨 둔 곳."""
+import json
+
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 
+from . import auth
 from .models import Customer
 
 
 def _json(data, status=200) -> JsonResponse:
     return JsonResponse(data, status=status, json_dumps_params={"ensure_ascii": False})
+
+
+@csrf_exempt
+@require_POST
+def login(request):
+    # 취약점: 로그인 실패 횟수 제한이 없다. R1·R2가 막을 대상.
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        body = {}
+    if auth.check(body.get("username"), body.get("password")):
+        request.session["user"] = body["username"]
+        return _json({"ok": True, "user": body["username"]})
+    return _json({"error": "invalid_credentials", "message": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=401)
 
 
 @require_GET
