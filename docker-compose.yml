@@ -76,3 +76,11 @@ services:
     healthcheck:
       <<: *py-health
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/healthz')"]
+
+  # 시연 점검: docker compose run --rm rehearsal [--agent live -n 3]
+  rehearsal:
+    build: { context: ., dockerfile: detector/Dockerfile }
+    profiles: ["tools"]
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["python", "/scripts/rehearsal.py"]
