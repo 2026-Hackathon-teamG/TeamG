@@ -7,7 +7,7 @@ from redis.exceptions import ResponseError
 
 from shared import Event
 
-from . import db
+from . import db, hub
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,11 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
             log.exception("bad event %s, skipped", msg_id)
     if events:
         await db.insert_events(events)
-    # 다음 단계(점수, 묶음)는 여기서 events를 넘겨받아 처리
+        # 다음 단계(점수, 묶음)는 여기서 events를 넘겨받아 처리
+        for e in events:
+            await hub.broadcast("event", e.model_dump(mode="json"))
+        if hub.has_clients():
+            await hub.broadcast("stats", await db.stats())
     if ids:
         await r.xack(STREAM, GROUP, *ids)
 
@@ -60,6 +64,13 @@ async def run() -> None:
                 await handle(r, entries)
             except asyncio.CancelledError:
                 raise
+            except ResponseError as e:
+                # 누가 스트림을 지웠으면 group을 다시 만듦
+                if "NOGROUP" in str(e):
+                    await ensure_group(r)
+                    continue
+                log.exception("worker loop error")
+                await asyncio.sleep(1)
             except Exception:
                 log.exception("worker loop error")
                 await asyncio.sleep(1)
