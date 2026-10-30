@@ -241,4 +241,7 @@ docker compose exec bank python manage.py seed_customers   # 고객 2,400명 생
 curl -X POST localhost:8002/ops/demo/reset
 curl -X POST localhost:8002/ops/demo/run -H 'content-type: application/json' -d '{"mode":"live"}'
 docker compose exec redis redis-cli XLEN events
+docker compose run --rm rehearsal                           # 파트별 계약 점검 (LLM 없이)
+docker compose run --rm rehearsal --only on                 # 한 구간만: health | bank | off | on
+docker compose run --rm rehearsal --agent replay -n 3       # 시연 시나리오 전체 3회 + 비교 표
 ```
