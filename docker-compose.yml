@@ -1,0 +1,78 @@
+x-py-health: &py-health
+  interval: 5s
+  timeout: 3s
+  retries: 20
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mikki
+      POSTGRES_PASSWORD: mikki
+      POSTGRES_DB: mikki
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mikki -d mikki"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  bank:
+    build: { context: ., dockerfile: bank/Dockerfile }
+    env_file: .env
+    ports: ["8001:8001"]
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+
+  gateway:
+    build: { context: ., dockerfile: gateway/Dockerfile }
+    env_file: .env
+    ports: ["8000:8000"]
+    depends_on:
+      bank: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+
+  detector:
+    build: { context: ., dockerfile: detector/Dockerfile }
+    env_file: .env
+    ports: ["8002:8002"]
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/healthz')"]
+
+  ops-ui:
+    build: ./ops-ui
+    ports: ["8003:8003"]
+    depends_on:
+      detector: { condition: service_healthy }
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8003/healthz"]
+
+  agent:
+    build: { context: ., dockerfile: agent/Dockerfile }
+    env_file: .env
+    ports: ["8004:8004"]
+    volumes:
+      - ./agent/runs:/app/runs
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/healthz')"]
