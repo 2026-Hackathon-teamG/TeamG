@@ -8,10 +8,12 @@ from starlette.background import BackgroundTask
 from shared import tokens
 
 from . import decoys, events, proxy, quarantine
-from .decoys import admin_legacy, docs_bait, endless_export, fake, robots
+from .decoys import admin_legacy, audit, docs_bait, endless_export, fake, robots
 
 CUSTOMERS_PATH = "/api/v1/customers"
 LOGIN_PATH = "/api/v1/login"
+# 감사 미끼 안내문을 심을 페이지(에이전트가 로그인 뒤 읽는 화면)
+LANDING_PATHS = ("/", "/login")
 
 
 @asynccontextmanager
@@ -74,6 +76,12 @@ async def route(request: Request, gate: quarantine.Gate) -> Outcome:
         return Outcome(endless_export.respond(actor_id, page_no, quarantine.TOKEN_SECRET),
                        "decoy", endless_export.DECOY_ID, endless_export.PAGE_SIZE)
 
+    # 감사 미끼: 숨은 안내문을 따라 이 경로에 들어오면 그 자리에서 세션·IP를 격리
+    if path == audit.PATH and gate.enabled(audit.DECOY_ID):
+        await quarantine.trap(gate)
+        await decoys.delay()
+        return Outcome(audit.page(), "decoy", audit.DECOY_ID)
+
     # 격리된 공격 주체의 고객 조회는 bank 대신 가짜 데이터로
     if gate.actor_id and path == CUSTOMERS_PATH:
         await decoys.delay()
@@ -93,6 +101,10 @@ async def route(request: Request, gate: quarantine.Gate) -> Outcome:
         return Outcome(proxy.replace_body(upstream, robots.inject(upstream.body)), decoy_id=robots.DECOY_ID)
     if path == docs_bait.PATH and ok and gate.enabled(docs_bait.DECOY_ID):
         return Outcome(proxy.replace_body(upstream, docs_bait.inject(upstream.body)), decoy_id=docs_bait.DECOY_ID)
+    # 로그인/메인 페이지(HTML)에 감사 미끼 안내문을 심음
+    if path in LANDING_PATHS and ok and gate.enabled(audit.DECOY_ID) \
+            and "text/html" in upstream.headers.get("content-type", ""):
+        return Outcome(proxy.replace_body(upstream, audit.inject(upstream.body)), decoy_id=audit.DECOY_ID)
 
     # 실제 유출 건수: bank로 넘어간 고객 조회 200 한 건 = 레코드 1건
     leaked = 1 if path == CUSTOMERS_PATH and ok else 0
