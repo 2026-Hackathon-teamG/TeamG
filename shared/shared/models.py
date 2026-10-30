@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-DecoyId = Literal["robots", "admin_legacy", "docs_bait", "endless_export"]
+DecoyId = Literal["robots", "admin_legacy", "docs_bait", "endless_export", "audit"]
 
 
 class Event(BaseModel):
@@ -24,7 +24,7 @@ class Event(BaseModel):
     records_out: int = 0     # 이 응답으로 나간 레코드 수
     agent_note: str | None = None   # 시연용. X-Agent-Note 헤더 값
     internal_header: bool = False   # X-Internal-Request 헤더 포함 여부
-    login_result: Literal["success", "fail"] | None = None  # 로그인 시도 결과 (gateway가 bank 응답 헤더에서 읽음)
+    login_result: Literal["success", "fail", "step_up"] | None = None  # 로그인 결과. step_up=비번은 맞지만 추가 인증 필요(R5)
     account: str | None = None      # 로그인 등 시도 대상 계정
 
 

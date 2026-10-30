@@ -111,7 +111,7 @@ def apply(state: State, e: Event) -> None:
     if parts.path == "/admin-legacy":
         state.visited_admin = True
     found = {
-        "decoy": e.decoy_id in ("admin_legacy", "endless_export"),
+        "decoy": e.decoy_id in ("admin_legacy", "endless_export", "audit"),
         "hidden_guide": parts.path == "/api/internal/export" and not state.visited_admin,
         "internal_header": e.internal_header,
         "sequential_ids": _is_sequential(state, parts.path, parts.query),
