@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import asyncpg
 
@@ -91,3 +92,94 @@ async def insert_events(events: list[Event]) -> None:
     rows = [tuple(getattr(e, c) for c in _EVENT_COLS) for e in events]
     async with pool.acquire() as conn:
         await conn.executemany(_INSERT_EVENT, rows)
+
+
+# ---------- 관제 API 조회 ----------
+
+async def list_events(since: datetime | None, limit: int) -> list[dict]:
+    # 최신 limit개를 시간순으로
+    rows = await pool.fetch(
+        "SELECT * FROM (SELECT * FROM events WHERE ($1::timestamptz IS NULL OR ts > $1) "
+        "ORDER BY ts DESC LIMIT $2) t ORDER BY ts",
+        since, limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def list_actors() -> list[dict]:
+    rows = await pool.fetch(
+        "SELECT a.*, "
+        "  (SELECT count(*) FROM actor_links l WHERE l.actor_id = a.id AND l.kind = 'ip') AS ip_count "
+        "FROM actors a ORDER BY a.id"
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_actor(actor_id: str) -> dict | None:
+    actor = await pool.fetchrow("SELECT * FROM actors WHERE id = $1", actor_id)
+    if actor is None:
+        return None
+    links = await pool.fetch(
+        "SELECT kind, value, confidence FROM actor_links WHERE actor_id = $1 ORDER BY kind, value",
+        actor_id,
+    )
+    # 묶이기 전 IP로 들어온 요청까지 타임라인에 포함
+    timeline = await pool.fetch(
+        "SELECT * FROM events WHERE actor_id = $1 "
+        "OR ip IN (SELECT value FROM actor_links WHERE actor_id = $1 AND kind = 'ip') "
+        "ORDER BY ts",
+        actor_id,
+    )
+    return {**dict(actor), "links": [dict(r) for r in links], "timeline": [dict(r) for r in timeline]}
+
+
+async def release_actor(actor_id: str) -> list[tuple[str, str]] | None:
+    """상태를 released로 바꾸고 풀어야 할 격리 대상 (kind, value)를 돌려줌."""
+    async with pool.acquire() as conn, conn.transaction():
+        updated = await conn.execute("UPDATE actors SET status = 'released' WHERE id = $1", actor_id)
+        if updated.endswith(" 0"):
+            return None
+        links = await conn.fetch(
+            "SELECT kind, value FROM actor_links WHERE actor_id = $1 AND kind IN ('ip', 'session', 'token')",
+            actor_id,
+        )
+    return [(r["kind"], r["value"]) for r in links]
+
+
+async def list_decoys() -> list[dict]:
+    rows = await pool.fetch("SELECT * FROM decoys ORDER BY id")
+    return [dict(r) for r in rows]
+
+
+async def set_decoys(enabled: bool, decoy_id: str | None = None) -> list[dict]:
+    rows = await pool.fetch(
+        "UPDATE decoys SET enabled = $1 WHERE ($2::text IS NULL OR id = $2) RETURNING *",
+        enabled, decoy_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def stats() -> dict:
+    row = await pool.fetchrow(
+        """
+        SELECT
+          COALESCE(SUM(records_out) FILTER (WHERE routed_to = 'bank'), 0)               AS real_leaks,
+          COALESCE(SUM(records_out) FILTER (WHERE decoy_id = 'endless_export'), 0)      AS fake_records,
+          COUNT(*) FILTER (WHERE decoy_id IN ('admin_legacy', 'endless_export'))       AS trap_hits,
+          COUNT(*)                                                                      AS total_events
+        FROM events
+        """
+    )
+    # 묶어 둔 시간: 공격 주체별 미끼 응답 첫 요청~마지막 요청 길이의 합
+    held = await pool.fetchval(
+        "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM span)), 0) FROM ("
+        "  SELECT MAX(ts) - MIN(ts) AS span FROM events "
+        "  WHERE routed_to = 'decoy' AND actor_id IS NOT NULL GROUP BY actor_id"
+        ") t"
+    )
+    actors = await pool.fetchval("SELECT COUNT(*) FROM actors WHERE status = 'quarantined'")
+    return {**dict(row), "held_seconds": round(float(held), 1), "quarantined_actors": actors}
+
+
+async def reset() -> None:
+    await pool.execute("TRUNCATE events, actor_links, actors, canary_tokens")
