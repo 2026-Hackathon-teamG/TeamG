@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import db, worker
+from . import db, stream, worker
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="detector", lifespan=lifespan)
+app.include_router(stream.router)
 
 
 @app.get("/healthz")
