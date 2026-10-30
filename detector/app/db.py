@@ -57,7 +57,8 @@ INSERT INTO decoys (id, kind, path) VALUES
     ('robots',         'inject', '/robots.txt'),
     ('admin_legacy',   'page',   '/admin-legacy'),
     ('docs_bait',      'inject', '/api/v1/docs'),
-    ('endless_export', 'api',    '/api/internal/export')
+    ('endless_export', 'api',    '/api/internal/export'),
+    ('audit',          'api',    '/internal/v2/audit/001')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS canary_tokens (
@@ -203,7 +204,7 @@ async def stats() -> dict:
         SELECT
           COALESCE(SUM(records_out) FILTER (WHERE routed_to = 'bank'), 0)               AS real_leaks,
           COALESCE(SUM(records_out) FILTER (WHERE routed_to = 'decoy'), 0)              AS fake_records,
-          COUNT(*) FILTER (WHERE decoy_id IN ('admin_legacy', 'endless_export'))       AS trap_hits,
+          COUNT(*) FILTER (WHERE decoy_id IN ('admin_legacy', 'endless_export', 'audit'))       AS trap_hits,
           COUNT(*)                                                                      AS total_events
         FROM events
         """
