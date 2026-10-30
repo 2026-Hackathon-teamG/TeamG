@@ -1,4 +1,5 @@
 import os
+from http.cookiejar import DefaultCookiePolicy
 
 import httpx
 from fastapi import Request, Response
@@ -15,6 +16,9 @@ _client: httpx.AsyncClient | None = None
 async def startup() -> None:
     global _client
     _client = httpx.AsyncClient(base_url=BANK_URL, timeout=10.0)
+    # 클라이언트 하나를 모든 사용자가 공유하므로 쿠키를 저장하면 세션이 섞인다.
+    # 사용자 쿠키는 요청 헤더로 그대로 넘어가니 저장소는 비워 둔다.
+    _client.cookies.jar.set_policy(DefaultCookiePolicy(allowed_domains=[]))
 
 
 async def shutdown() -> None:
