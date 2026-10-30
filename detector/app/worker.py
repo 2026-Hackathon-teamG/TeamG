@@ -8,7 +8,7 @@ from redis.exceptions import ResponseError
 
 from shared import Event, tokens
 
-from . import db, hub, scoring
+from . import db, defense, hub, scoring
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,10 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
             except Exception:
                 # 이벤트 저장과 전송은 계속되게 함. 격리는 다음 이벤트에서 다시 시도됨
                 log.exception("scoring failed: %s", e.id)
+            try:
+                await defense.process(e)
+            except Exception:
+                log.exception("defense failed: %s", e.id)
         if hub.has_clients():
             await hub.broadcast("stats", await db.stats())
     if ids:

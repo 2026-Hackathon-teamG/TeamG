@@ -11,6 +11,7 @@ from . import decoys, events, proxy, quarantine
 from .decoys import admin_legacy, docs_bait, endless_export, fake, robots
 
 CUSTOMERS_PATH = "/api/v1/customers"
+LOGIN_PATH = "/api/v1/login"
 
 
 @asynccontextmanager
@@ -31,6 +32,8 @@ class Outcome:
     routed_to: str = "bank"
     decoy_id: str | None = None
     records_out: int = 0
+    login_result: str | None = None
+    account: str | None = None
 
 
 @app.get("/healthz")
@@ -41,11 +44,18 @@ async def healthz():
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
 async def catch_all(request: Request, path: str):
     gate = await quarantine.inspect(request)
-    out = await route(request, gate)
+    out = blocked_response() if gate.blocked else await route(request, gate)
     event = events.build(request, out.response.status_code, routed_to=out.routed_to,
-                         decoy_id=out.decoy_id, actor_id=gate.actor_id, records_out=out.records_out)
+                         decoy_id=out.decoy_id, actor_id=gate.actor_id, records_out=out.records_out,
+                         login_result=out.login_result, account=out.account)
     out.response.background = BackgroundTask(events.publish, event)
     return out.response
+
+
+def blocked_response() -> Outcome:
+    # 차단된 IP·주체. 격리(미끼)와 달리 서비스 자체를 막음
+    return Outcome(JSONResponse({"error": "too_many_requests", "message": "잠시 후 다시 시도해 주세요."},
+                                status_code=429))
 
 
 async def route(request: Request, gate: quarantine.Gate) -> Outcome:
@@ -71,6 +81,12 @@ async def route(request: Request, gate: quarantine.Gate) -> Outcome:
 
     upstream = await proxy.forward(request)
     ok = upstream.status_code == 200
+
+    # 로그인 결과를 bank 응답 헤더에서 읽어 이벤트에 실음 (detector의 R1/R2 채점용)
+    if path == LOGIN_PATH:
+        result = upstream.headers.get("x-login-result")
+        account = upstream.headers.get("x-login-account")
+        return Outcome(upstream, login_result=result, account=(account if account not in (None, "-") else None))
 
     # 미끼: bank 응답에 한 줄씩 덧붙임
     if path == robots.PATH and ok and gate.enabled(robots.DECOY_ID):

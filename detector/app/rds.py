@@ -25,3 +25,10 @@ async def shutdown() -> None:
 
 def quarantine_key(kind: str, value: str) -> str:
     return f"{QUARANTINE_PREFIX}{kind}:{value}"
+
+
+BLOCK_PREFIX = "block:"   # gateway가 429로 막는 키. block:ip:<ip>, block:actor:<id>
+
+
+def block_key(kind: str, value: str) -> str:
+    return f"{BLOCK_PREFIX}{kind}:{value}"

@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS events (
     agent_note  TEXT
 );
 ALTER TABLE events ADD COLUMN IF NOT EXISTS internal_header BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS login_result TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS account TEXT;
 CREATE INDEX IF NOT EXISTS events_ts_idx ON events (ts);
 CREATE INDEX IF NOT EXISTS events_ip_idx ON events (ip);
 
