@@ -1,1 +1,1 @@
-# hackathon-team-g frontend 저장소
+# hackathon-team-g backend 저장소
