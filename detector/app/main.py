@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, ops, rds, worker
+from . import control, db, ops, rds, worker
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app = FastAPI(title="detector", lifespan=lifespan)
 # ops-ui(:8003)에서 호출
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(ops.router)
+app.include_router(control.router)   # 관제 화면(ops-ui)이 붙는 /api/state·/api/control
 
 
 @app.get("/healthz")
