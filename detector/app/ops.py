@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from shared import Actor
 from shared.models import DecoyId
 
-from . import db, hub, rds, scoring
+from . import db, defense, hub, rds, scoring
 
 AGENT_URL = os.environ.get("AGENT_URL", "http://agent:8004")
 
@@ -111,10 +111,12 @@ async def demo_reset():
     # 스트림은 지우지 않고 비워야 consumer group이 유지됨
     await rds.client.xtrim(rds.STREAM, maxlen=0, approximate=False)
     keys = [k async for k in rds.client.scan_iter(match=rds.QUARANTINE_PREFIX + "*", count=500)]
+    keys += [k async for k in rds.client.scan_iter(match=rds.BLOCK_PREFIX + "*", count=500)]
     if keys:
         await rds.client.delete(*keys)
     await rds.client.delete(rds.ACTOR_SEQ_KEY)   # 다시 A-01부터
     scoring.reset()
+    defense.reset()
     await hub.broadcast("reset", None)
     await push_stats()
     return {"ok": True, "quarantine_keys_cleared": len(keys)}
