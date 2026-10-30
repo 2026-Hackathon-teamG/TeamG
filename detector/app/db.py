@@ -143,7 +143,8 @@ async def list_events(since: datetime | None, limit: int) -> list[dict]:
 async def list_actors() -> list[dict]:
     rows = await pool.fetch(
         "SELECT a.*, "
-        "  (SELECT count(*) FROM actor_links l WHERE l.actor_id = a.id AND l.kind = 'ip') AS ip_count "
+        "  (SELECT count(*) FROM actor_links l WHERE l.actor_id = a.id AND l.kind = 'ip' "
+        "   AND l.confidence = '확정') AS ip_count "
         "FROM actors a ORDER BY a.id"
     )
     return [dict(r) for r in rows]

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from shared import Event
@@ -16,3 +17,16 @@ def test_parse_stream_entry():
 def test_insert_covers_all_event_fields():
     assert db._EVENT_COLS == list(Event.model_fields)
     assert f"${len(Event.model_fields)})" in db._INSERT_EVENT
+
+
+def test_ip_count_only_counts_confirmed_ips(monkeypatch):
+    queries = []
+
+    class FakePool:
+        async def fetch(self, query):
+            queries.append(query)
+            return []
+
+    monkeypatch.setattr(db, "pool", FakePool())
+    asyncio.run(db.list_actors())
+    assert "l.confidence = '확정'" in queries[0]

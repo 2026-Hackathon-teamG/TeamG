@@ -69,13 +69,14 @@ async def actor(actor_id: str):
 
 @router.post("/actors/{actor_id}/release")
 async def release(actor_id: str):
+    # 해제 도중 들어온 요청이 남은 점수로 상태를 quarantined로 되돌리지 않게 점수부터 지움
+    scoring.forget(actor_id)
     targets = await db.release_actor(actor_id)
     if targets is None:
         raise HTTPException(404, "actor not found")
     if targets:
         await rds.client.delete(*(rds.quarantine_key(k, v) for k, v in targets))
-    scoring.forget(actor_id)
-    released = Actor.model_validate(await db.get_actor(actor_id))
+    released =Actor.model_validate(await db.get_actor(actor_id))
     await hub.broadcast("actor_update", released.model_dump(mode="json"))
     return {"id": actor_id, "status": "released", "released_keys": len(targets)}
 

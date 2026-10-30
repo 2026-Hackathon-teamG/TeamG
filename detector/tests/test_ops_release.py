@@ -14,13 +14,14 @@ IP = "203.0.113.24"
 def test_release_clears_keys_and_score_and_sends_actor_format(monkeypatch):
     scoring.reset()
     scoring._states["A-01"] = scoring._states[IP] = scoring.State(first_seen=T0, last_seen=T0, score=60)
-    deleted, sent = [], []
+    deleted, sent, states_at_release = [], [], []
 
     class FakeRedis:
         async def delete(self, *keys):
             deleted.extend(keys)
 
     async def release_actor(actor_id):
+        states_at_release.append(dict(scoring._states))
         return [("ip", IP)]
 
     async def get_actor(actor_id):
@@ -41,7 +42,7 @@ def test_release_clears_keys_and_score_and_sends_actor_format(monkeypatch):
     assert TestClient(app).post("/ops/actors/A-01/release").status_code == 200
 
     assert deleted == [f"quarantine:ip:{IP}"]
-    assert scoring._states == {}
+    assert states_at_release == [{}]    # DB를 바꾸기 전에 점수를 먼저 지움
     (type_, data), = sent
     assert type_ == "actor_update"
     assert Actor.model_validate(data).status == "released"
