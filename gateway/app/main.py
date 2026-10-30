@@ -7,7 +7,7 @@ from starlette.background import BackgroundTask
 
 from shared import tokens
 
-from . import decoys, events, proxy, quarantine
+from . import decoys, events, mfa, proxy, quarantine
 from .decoys import admin_legacy, audit, docs_bait, endless_export, fake, robots
 
 CUSTOMERS_PATH = "/api/v1/customers"
@@ -36,6 +36,7 @@ class Outcome:
     records_out: int = 0
     login_result: str | None = None
     account: str | None = None
+    mfa_action: str | None = None
 
 
 @app.get("/healthz")
@@ -49,7 +50,7 @@ async def catch_all(request: Request, path: str):
     out = blocked_response() if gate.blocked else await route(request, gate)
     event = events.build(request, out.response.status_code, routed_to=out.routed_to,
                          decoy_id=out.decoy_id, actor_id=gate.actor_id, records_out=out.records_out,
-                         login_result=out.login_result, account=out.account)
+                         login_result=out.login_result, account=out.account, mfa_action=out.mfa_action)
     out.response.background = BackgroundTask(events.publish, event)
     return out.response
 
@@ -87,8 +88,22 @@ async def route(request: Request, gate: quarantine.Gate) -> Outcome:
         await decoys.delay()
         return fake_customer(request, gate.actor_id)
 
+    # R6: 번호 일치가 걸린 계정의 MFA 승인은 번호가 맞아야 bank로 넘김
+    if path == mfa.APPROVE_PATH and request.method == "POST":
+        account, denied = await mfa.check_approve(request)
+        if denied is not None:
+            return Outcome(denied, account=account, mfa_action="approve")
+
     upstream = await proxy.forward(request)
     ok = upstream.status_code == 200
+
+    # MFA 요청/승인을 bank 응답 헤더에서 읽어 이벤트에 실음 (detector의 R6 채점용)
+    mfa_action = upstream.headers.get("x-mfa-action")
+    if mfa_action in ("request", "approve"):
+        account = upstream.headers.get("x-login-account")
+        if mfa_action == "request" and ok and account:
+            await mfa.remember_request(upstream.body, account)
+        return Outcome(upstream, account=account, mfa_action=mfa_action)
 
     # 로그인 결과를 bank 응답 헤더에서 읽어 이벤트에 실음 (detector의 R1/R2 채점용)
     if path == LOGIN_PATH:

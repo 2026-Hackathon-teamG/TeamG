@@ -8,7 +8,7 @@ from redis.exceptions import ResponseError
 
 from shared import Event, tokens
 
-from . import db, defense, hub, scoring
+from . import db, defense, hub, mfa_defense, scoring
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +66,10 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
                 await defense.process(e)
             except Exception:
                 log.exception("defense failed: %s", e.id)
+            try:
+                await mfa_defense.process(e)
+            except Exception:
+                log.exception("mfa_defense failed: %s", e.id)
         if hub.has_clients():
             await hub.broadcast("stats", await db.stats())
     if ids:

@@ -23,6 +23,17 @@ def key(kind: str, value: str) -> str:
 def block_key(kind: str, value: str) -> str:
     # detector가 로그인 실패 폭주 등으로 올림. 격리(미끼)와 달리 요청을 429로 막음
     return f"block:{kind}:{value}"
+NUMBERMATCH_PREFIX = "numbermatch:"  # detector가 R6로 세움. numbermatch:<account>
+
+
+def numbermatch_key(account: str) -> str:
+    return f"{NUMBERMATCH_PREFIX}{account}"
+
+
+def mfa_number_key(account: str) -> str:
+    # 번호 일치에 쓸 실제 숫자. API 응답으로는 안 내려주고 서버에만 보관한다
+    # (실제로는 사용자 폰 화면에만 뜨는 숫자라고 가정)
+    return f"mfa_number:{account}"
 
 
 @dataclass
