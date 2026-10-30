@@ -32,3 +32,9 @@ BLOCK_PREFIX = "block:"   # gateway가 429로 막는 키. block:ip:<ip>, block:a
 
 def block_key(kind: str, value: str) -> str:
     return f"{BLOCK_PREFIX}{kind}:{value}"
+
+NUMBERMATCH_PREFIX = "numbermatch:"  # R6가 세움. numbermatch:<account>
+
+
+def numbermatch_key(account: str) -> str:
+    return f"{NUMBERMATCH_PREFIX}{account}"

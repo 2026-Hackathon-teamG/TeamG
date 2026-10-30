@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from shared import Actor
 from shared.models import DecoyId
 
-from . import db, defense, hub, rds, scoring
+from . import db, defense, hub, mfa_defense, rds, scoring
 
 AGENT_URL = os.environ.get("AGENT_URL", "http://agent:8004")
 
@@ -112,11 +112,15 @@ async def demo_reset():
     await rds.client.xtrim(rds.STREAM, maxlen=0, approximate=False)
     keys = [k async for k in rds.client.scan_iter(match=rds.QUARANTINE_PREFIX + "*", count=500)]
     keys += [k async for k in rds.client.scan_iter(match=rds.BLOCK_PREFIX + "*", count=500)]
+    # R6 번호 일치 플래그와 gateway가 보관한 MFA 요청·번호
+    for prefix in (rds.NUMBERMATCH_PREFIX, "mfa_number:", "mfa_req:"):
+        keys += [k async for k in rds.client.scan_iter(match=prefix + "*", count=500)]
     if keys:
         await rds.client.delete(*keys)
     await rds.client.delete(rds.ACTOR_SEQ_KEY)   # 다시 A-01부터
     scoring.reset()
     defense.reset()
+    mfa_defense.reset()
     await hub.broadcast("reset", None)
     await push_stats()
     return {"ok": True, "quarantine_keys_cleared": len(keys)}
