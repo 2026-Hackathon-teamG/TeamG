@@ -3,7 +3,7 @@ from datetime import datetime
 
 import asyncpg
 
-from shared import Event
+from shared import Actor, Event
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://mikki:mikki@postgres:5432/mikki")
 
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
     records_out INT NOT NULL DEFAULT 0,
     agent_note  TEXT
 );
+ALTER TABLE events ADD COLUMN IF NOT EXISTS internal_header BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS events_ts_idx ON events (ts);
 CREATE INDEX IF NOT EXISTS events_ip_idx ON events (ip);
 
@@ -92,6 +93,21 @@ async def insert_events(events: list[Event]) -> None:
     rows = [tuple(getattr(e, c) for c in _EVENT_COLS) for e in events]
     async with pool.acquire() as conn:
         await conn.executemany(_INSERT_EVENT, rows)
+
+
+async def save_actor(actor: Actor, links: list[tuple[str, str]]) -> None:
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute(
+            "INSERT INTO actors (id, status, score, first_seen, last_seen) VALUES ($1, $2, $3, $4, $5) "
+            "ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, score = EXCLUDED.score, "
+            "last_seen = EXCLUDED.last_seen",
+            actor.id, actor.status, actor.score, actor.first_seen, actor.last_seen,
+        )
+        await conn.executemany(
+            "INSERT INTO actor_links (actor_id, kind, value, confidence) VALUES ($1, $2, $3, '확정') "
+            "ON CONFLICT DO NOTHING",
+            [(actor.id, kind, value) for kind, value in links],
+        )
 
 
 # ---------- 관제 API 조회 ----------

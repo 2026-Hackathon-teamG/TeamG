@@ -74,6 +74,7 @@ def build(
         routed_to=routed_to,
         records_out=records_out,
         agent_note=agent_note(request.headers),
+        internal_header="x-internal-request" in request.headers,
     )
 
 
