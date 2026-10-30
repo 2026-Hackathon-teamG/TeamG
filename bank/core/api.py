@@ -57,10 +57,19 @@ def login(request):
         return _json({"error": "bad_request", "message": "JSON 본문이 필요합니다."}, status=400)
     username = str(data.get("username", ""))
     if not username or DEMO_USERS.get(username) != str(data.get("password", "")):
-        return _json({"error": "unauthorized", "message": "아이디 또는 비밀번호가 맞지 않습니다."}, status=401)
+        return _login_result(
+            _json({"error": "unauthorized", "message": "아이디 또는 비밀번호가 맞지 않습니다."}, status=401),
+            "fail", username)
     request.session.cycle_key()
     request.session["user"] = username
-    return _json({"user": username})
+    return _login_result(_json({"user": username}), "success", username)
+
+
+def _login_result(resp, result: str, account: str):
+    # gateway가 이 헤더로 로그인 성공/실패와 대상 계정을 읽어 R1·R2 채점에 쓴다
+    resp["X-Login-Result"] = result
+    resp["X-Login-Account"] = account or "-"
+    return resp
 
 
 @require_POST
