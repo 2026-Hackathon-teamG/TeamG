@@ -54,6 +54,8 @@ def build(
     decoy_id: str | None = None,
     actor_id: str | None = None,
     records_out: int = 0,
+    login_result: str | None = None,
+    account: str | None = None,
 ) -> Event:
     path = request.url.path
     if request.url.query:
@@ -75,6 +77,8 @@ def build(
         records_out=records_out,
         agent_note=agent_note(request.headers),
         internal_header="x-internal-request" in request.headers,
+        login_result=login_result,
+        account=account,
     )
 
 

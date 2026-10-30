@@ -20,6 +20,11 @@ def key(kind: str, value: str) -> str:
     return f"quarantine:{kind}:{value}"
 
 
+def block_key(kind: str, value: str) -> str:
+    # detector가 로그인 실패 폭주 등으로 올림. 격리(미끼)와 달리 요청을 429로 막음
+    return f"block:{kind}:{value}"
+
+
 @dataclass
 class Gate:
     ip: str
@@ -27,6 +32,7 @@ class Gate:
     token: str | None
     actor_id: str | None = None          # 이미 격리된 공격 주체
     decoys: dict[str, bool] = field(default_factory=dict)
+    blocked: bool = False                # 차단 키에 걸림 → 429
 
     def enabled(self, decoy_id: str) -> bool:
         return self.decoys.get(decoy_id, False)
@@ -51,12 +57,14 @@ async def inspect(request: Request) -> Gate:
         token=request.query_params.get("token"),
     )
     try:
-        pipe = events.redis().pipeline(transaction=False)
+        client = events.redis()
+        pipe = client.pipeline(transaction=False)
         pipe.hgetall(DECOYS_KEY)
         pipe.mget([key(k, v) for k, v in gate.identities()])
-        flags, hits = await pipe.execute()
+        pipe.exists(block_key("ip", gate.ip))
+        flags, hits, ip_blocked = await pipe.execute()
     except Exception:
-        # Redis 장애 시 미끼·격리 없이 bank로 통과시킴
+        # Redis 장애 시 미끼·격리·차단 없이 bank로 통과시킴
         log.exception("quarantine lookup failed")
         return gate
     gate.decoys = {_text(k): _text(v) == "1" for k, v in flags.items()}
@@ -66,6 +74,10 @@ async def inspect(request: Request) -> Gate:
         verified = tokens.verify(gate.token, TOKEN_SECRET)
         if verified:
             gate.actor_id = verified[0]
+    gate.blocked = bool(ip_blocked)
+    if not gate.blocked and gate.actor_id:
+        # 주체 단위 차단(R2)은 공격 주체가 확인된 뒤에만 조회
+        gate.blocked = bool(await client.exists(block_key("actor", gate.actor_id)))
     return gate
 
 
