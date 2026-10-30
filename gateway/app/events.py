@@ -87,6 +87,10 @@ async def shutdown() -> None:
         await _redis.aclose()
 
 
+def redis() -> aioredis.Redis:
+    return _redis
+
+
 async def publish(event: Event) -> None:
     """응답을 보낸 뒤 BackgroundTask로 호출. Redis 장애가 프록시를 막지 않게 예외는 로그만."""
     try:

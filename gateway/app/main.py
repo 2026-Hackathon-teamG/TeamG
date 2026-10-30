@@ -1,9 +1,14 @@
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
-from . import events, proxy
+from shared import tokens
+
+from . import decoys, events, proxy, quarantine
+from .decoys import admin_legacy, docs_bait, endless_export, fake, robots
 
 CUSTOMERS_PATH = "/api/v1/customers"
 
@@ -20,6 +25,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="gateway", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@dataclass
+class Outcome:
+    response: Response
+    routed_to: str = "bank"
+    decoy_id: str | None = None
+    records_out: int = 0
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "service": "gateway"}
@@ -27,9 +40,58 @@ async def healthz():
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
 async def catch_all(request: Request, path: str):
-    response = await proxy.forward(request)
+    gate = await quarantine.inspect(request)
+    out = await route(request, gate)
+    event = events.build(request, out.response.status_code, routed_to=out.routed_to,
+                         decoy_id=out.decoy_id, actor_id=gate.actor_id, records_out=out.records_out)
+    out.response.background = BackgroundTask(events.publish, event)
+    return out.response
+
+
+async def route(request: Request, gate: quarantine.Gate) -> Outcome:
+    path = request.url.path
+
+    # 함정: 걸리는 즉시 공격 주체를 정하고 격리
+    if path == admin_legacy.PATH and gate.enabled(admin_legacy.DECOY_ID):
+        await quarantine.trap(gate)
+        await decoys.delay()
+        return Outcome(admin_legacy.page(), "decoy", admin_legacy.DECOY_ID)
+
+    if path == endless_export.PATH and gate.enabled(endless_export.DECOY_ID):
+        actor_id = await quarantine.trap(gate)
+        page_no = tokens.export_page(request.query_params.get("page"), gate.token, quarantine.TOKEN_SECRET)
+        await decoys.delay()
+        return Outcome(endless_export.respond(actor_id, page_no, quarantine.TOKEN_SECRET),
+                       "decoy", endless_export.DECOY_ID, endless_export.PAGE_SIZE)
+
+    # 격리된 공격 주체의 고객 조회는 bank 대신 가짜 데이터로
+    if gate.actor_id and path == CUSTOMERS_PATH:
+        await decoys.delay()
+        return fake_customer(request, gate.actor_id)
+
+    upstream = await proxy.forward(request)
+    ok = upstream.status_code == 200
+
+    # 미끼: bank 응답에 한 줄씩 덧붙임
+    if path == robots.PATH and ok and gate.enabled(robots.DECOY_ID):
+        return Outcome(proxy.replace_body(upstream, robots.inject(upstream.body)), decoy_id=robots.DECOY_ID)
+    if path == docs_bait.PATH and ok and gate.enabled(docs_bait.DECOY_ID):
+        return Outcome(proxy.replace_body(upstream, docs_bait.inject(upstream.body)), decoy_id=docs_bait.DECOY_ID)
+
     # 실제 유출 건수: bank로 넘어간 고객 조회 200 한 건 = 레코드 1건
-    leaked = 1 if request.url.path == CUSTOMERS_PATH and response.status_code == 200 else 0
-    event = events.build(request, response.status_code, records_out=leaked)
-    response.background = BackgroundTask(events.publish, event)
-    return response
+    leaked = 1 if path == CUSTOMERS_PATH and ok else 0
+    return Outcome(upstream, records_out=leaked)
+
+
+def fake_customer(request: Request, actor_id: str) -> Outcome:
+    """bank의 /api/v1/customers와 같은 규칙·형식으로 응답."""
+    def reply(data, status=200, records=0):
+        return Outcome(JSONResponse(data, status_code=status), "decoy", records_out=records)
+
+    internal = request.headers.get("x-internal-request", "").lower() == "true"
+    if not (internal or request.cookies.get("sessionid")):
+        return reply({"error": "unauthorized", "message": "로그인이 필요합니다."}, 401)
+    raw_id = request.query_params.get("id")
+    if raw_id is None or not raw_id.isdigit():
+        return reply({"error": "bad_request", "message": "id는 숫자여야 합니다."}, 400)
+    return reply(fake.customer(actor_id, int(raw_id)), records=1)
