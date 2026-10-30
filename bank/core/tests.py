@@ -153,3 +153,29 @@ class LoginHeaders(TestCase):
         self.assertEqual(bad.status_code, 401)
         self.assertEqual(bad["X-Login-Result"], "fail")
         self.assertEqual(bad["X-Login-Account"], "demo")
+
+
+class R3Enumeration(TestCase):
+    """R3: 로그인·재설정 응답으로 계정 존재 여부가 새지 않아야 한다."""
+
+    def _post(self, path, body):
+        return self.client.post(path, data=body, content_type="application/json")
+
+    def test_login_unknown_and_wrong_password_are_identical(self):
+        exists_wrong = self._post("/api/v1/login", {"username": "lee.s", "password": "wrong"})
+        unknown = self._post("/api/v1/login", {"username": "no.such", "password": "wrong"})
+        self.assertEqual(exists_wrong.status_code, 401)
+        self.assertEqual((exists_wrong.status_code, exists_wrong.content),
+                         (unknown.status_code, unknown.content))
+        self.assertEqual(exists_wrong["X-Login-Result"], unknown["X-Login-Result"])  # 둘 다 fail
+
+    def test_multi_account_login_succeeds(self):
+        r = self._post("/api/v1/login", {"username": "lee.s", "password": "Spring2026!"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["X-Login-Result"], "success")
+
+    def test_password_reset_is_uniform(self):
+        exists = self._post("/api/v1/password-reset", {"username": "lee.s"})
+        unknown = self._post("/api/v1/password-reset", {"username": "no.such"})
+        self.assertEqual(exists.status_code, 200)
+        self.assertEqual(exists.content, unknown.content)

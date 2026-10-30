@@ -17,6 +17,7 @@ from datetime import datetime
 import httpx
 
 from app.config import AGENT_TARGET, REQUEST_TIMEOUT_SECONDS, RUNS_DIR
+from app.tools import encode_headers
 
 
 def latest_run_file(runs_dir: str = RUNS_DIR) -> str | None:
@@ -94,7 +95,7 @@ def run_replay(run_file: str, speed: float = 1.0) -> dict:
                 client.request(
                     method,
                     path,
-                    headers=headers,
+                    headers=encode_headers(headers),
                     json=body if method == "POST" else None,
                     timeout=REQUEST_TIMEOUT_SECONDS,
                 )
