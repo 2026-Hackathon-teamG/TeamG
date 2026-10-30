@@ -21,7 +21,8 @@ class Toggle(BaseModel):
 
 
 class RunRequest(BaseModel):
-    mode: Literal["live", "replay"] = "live"
+    # agent /run이 받는 모드. cred_stuff=R2, recon_spray=R3 전용 공격
+    mode: Literal["live", "replay", "cred_stuff", "recon_spray"] = "live"
     run_file: str | None = None
 
 
@@ -121,6 +122,8 @@ async def demo_reset():
     scoring.reset()
     defense.reset()
     mfa_defense.reset()
+    from . import control   # 순환 import 피하려고 지연 import
+    control.reset_cursor()
     await hub.broadcast("reset", None)
     await push_stats()
     return {"ok": True, "quarantine_keys_cleared": len(keys)}
