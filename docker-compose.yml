@@ -34,12 +34,23 @@ services:
       <<: *py-health
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
 
+  # 은행 화면. 프론트 레포에서 빌드. nginx가 화면을 내보내고 /api/ 등은 bank로 넘김
+  # 다른 브랜치로 띄우려면: FRONTEND_REF=feat/xxx docker compose up --build
+  bank-ui:
+    build: https://github.com/2026-Hackathon-teamG/frontend.git#${FRONTEND_REF:-main}:bank-ui
+    ports: ["8005:8005"]
+    depends_on:
+      bank: { condition: service_healthy }
+    healthcheck:
+      <<: *py-health
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8005/healthz"]
+
   gateway:
     build: { context: ., dockerfile: gateway/Dockerfile }
     env_file: .env
     ports: ["8000:8000"]
     depends_on:
-      bank: { condition: service_healthy }
+      bank-ui: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
       <<: *py-health
@@ -56,8 +67,9 @@ services:
       <<: *py-health
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/healthz')"]
 
+  # 관제 화면. 프론트 레포에서 빌드. 브라우저가 detector(:8002)에 직접 붙음
   ops-ui:
-    build: ./ops-ui
+    build: https://github.com/2026-Hackathon-teamG/frontend.git#${FRONTEND_REF:-main}:ops-ui
     ports: ["8003:8003"]
     depends_on:
       detector: { condition: service_healthy }
