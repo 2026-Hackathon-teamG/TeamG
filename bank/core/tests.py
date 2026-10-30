@@ -93,3 +93,16 @@ class Seed(TestCase):
         self.assertEqual(Customer.objects.get(id=1001).name, first)
         call_command("seed_customers", if_empty=True)
         self.assertEqual(Customer.objects.count(), 2400)
+
+
+class LoginHeaders(TestCase):
+    def test_login_emits_result_headers(self):
+        ok = self.client.post("/api/v1/login", data={"username": "demo", "password": "demo1234"},
+                              content_type="application/json")
+        self.assertEqual(ok["X-Login-Result"], "success")
+        self.assertEqual(ok["X-Login-Account"], "demo")
+        bad = self.client.post("/api/v1/login", data={"username": "demo", "password": "x"},
+                               content_type="application/json")
+        self.assertEqual(bad.status_code, 401)
+        self.assertEqual(bad["X-Login-Result"], "fail")
+        self.assertEqual(bad["X-Login-Account"], "demo")
