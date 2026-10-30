@@ -164,7 +164,7 @@ async def stats() -> dict:
         """
         SELECT
           COALESCE(SUM(records_out) FILTER (WHERE routed_to = 'bank'), 0)               AS real_leaks,
-          COALESCE(SUM(records_out) FILTER (WHERE decoy_id = 'endless_export'), 0)      AS fake_records,
+          COALESCE(SUM(records_out) FILTER (WHERE routed_to = 'decoy'), 0)              AS fake_records,
           COUNT(*) FILTER (WHERE decoy_id IN ('admin_legacy', 'endless_export'))       AS trap_hits,
           COUNT(*)                                                                      AS total_events
         FROM events
@@ -183,3 +183,13 @@ async def stats() -> dict:
 
 async def reset() -> None:
     await pool.execute("TRUNCATE events, actor_links, actors, canary_tokens")
+
+
+async def insert_canaries(rows: list[tuple[str, str, int, str, datetime]]) -> None:
+    """(token, actor_id, page, ip, issued_at)"""
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            "INSERT INTO canary_tokens (token, actor_id, page, ip, issued_at) "
+            "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (token) DO NOTHING",
+            rows,
+        )

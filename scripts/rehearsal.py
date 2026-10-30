@@ -142,7 +142,8 @@ async def decoys_on(gw: httpx.AsyncClient, ops: httpx.AsyncClient) -> None:
     records = body.get("records") or body.get("data") or body.get("customers") or []
     token = body.get("next_token")
     check("endless_export: 50건", len(records) == 50, f"{len(records)}건")
-    check("endless_export: next_token 형식", bool(token) and token.startswith(f"pt_{actor_id}_1_"), str(token))
+    # 1페이지 응답의 next_token은 다음 페이지(2) 토큰
+    check("endless_export: next_token 형식", bool(token) and token.startswith(f"pt_{actor_id}_2_"), str(token))
     if records:
         email = json.dumps(records[0], ensure_ascii=False)
         check("가짜 레코드: 추적 표식", f"{(actor_id or '').lower()}.trace.example" in email, email[:80])

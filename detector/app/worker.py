@@ -1,17 +1,19 @@
 import asyncio
 import logging
 import os
+from urllib.parse import parse_qs, urlsplit
 
 import redis.asyncio as aioredis
 from redis.exceptions import ResponseError
 
-from shared import Event
+from shared import Event, tokens
 
 from . import db, hub
 
 log = logging.getLogger(__name__)
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+TOKEN_SECRET = os.environ.get("TOKEN_SECRET", "change-me")
 STREAM = "events"
 GROUP = "detector"
 CONSUMER = os.environ.get("HOSTNAME", "detector-1")
@@ -19,6 +21,18 @@ CONSUMER = os.environ.get("HOSTNAME", "detector-1")
 
 def parse(fields: dict[bytes, bytes]) -> Event:
     return Event.model_validate_json(fields[b"data"])
+
+
+def issued_canaries(events: list[Event]) -> list[tuple]:
+    """endless_export 응답마다 gateway가 내준 next_token을 같은 규칙으로 다시 계산해 기록."""
+    rows = []
+    for e in events:
+        if e.decoy_id != "endless_export" or e.status != 200 or not e.actor_id:
+            continue
+        query_page = (parse_qs(urlsplit(e.path).query).get("page") or [None])[0]
+        page = tokens.export_page(query_page, e.token, TOKEN_SECRET)
+        rows.append((tokens.sign(e.actor_id, page + 1, TOKEN_SECRET), e.actor_id, page + 1, e.ip, e.ts))
+    return rows
 
 
 async def ensure_group(r: aioredis.Redis) -> None:
@@ -39,6 +53,8 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
             log.exception("bad event %s, skipped", msg_id)
     if events:
         await db.insert_events(events)
+        if canaries := issued_canaries(events):
+            await db.insert_canaries(canaries)
         # 다음 단계(점수, 묶음)는 여기서 events를 넘겨받아 처리
         for e in events:
             await hub.broadcast("event", e.model_dump(mode="json"))

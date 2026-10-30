@@ -109,6 +109,7 @@ async def demo_reset():
     keys = [k async for k in rds.client.scan_iter(match=rds.QUARANTINE_PREFIX + "*", count=500)]
     if keys:
         await rds.client.delete(*keys)
+    await rds.client.delete(rds.ACTOR_SEQ_KEY)   # 다시 A-01부터
     await hub.broadcast("reset", None)
     await push_stats()
     return {"ok": True, "quarantine_keys_cleared": len(keys)}
