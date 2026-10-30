@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from app.config import ANTHROPIC_API_KEY, RUNS_DIR, assert_target_is_safe
 from app.llm_agent import run_live
+from app.red_r2 import run_cred_stuff
 from app.red_r3 import run_recon_spray
 from app.replay import latest_run_file, run_replay
 
@@ -76,6 +77,15 @@ def run(request: RunRequest) -> dict:
             raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY가 비어 있습니다. .env를 확인하세요.")
         _start(run_live, "live")
         return {"mode": "live", "status": "started"}
+
+    if request.mode == "cred_stuff":
+        # R2 공격: IP를 바꿔 가며 admin 크리덴셜 스터핑. LLM을 쓰지 않아 API 키가 필요 없다.
+        try:
+            assert_target_is_safe()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        _start(run_cred_stuff, "cred_stuff")
+        return {"mode": "cred_stuff", "status": "started"}
 
     if request.mode == "recon_spray":
         # R3 공격: 계정 열거 + 스프레이. LLM을 쓰지 않아 API 키가 필요 없다.
