@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Legacy Admin Console</title>
+  <style>
+    body { margin: 0; background: #d9dcd9; color: #1b1b1b; font: 14px/1.5 monospace; }
+    header { padding: 8px 16px; background: #2f3e4e; color: #fff; }
+    main { max-width: 960px; margin: 20px auto; padding: 0 16px; }
+    .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .stats div { flex: 1 1 160px; padding: 8px 12px; background: #f4f4f4; border: 1px solid #8a8a8a; }
+    .stats b { display: block; font-size: 18px; }
+    .bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 12px; background: #f4f4f4; border: 1px solid #8a8a8a; border-bottom: 0; }
+    .wrap-table { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 5px 10px; border: 1px solid #8a8a8a; text-align: left; white-space: nowrap; }
+    th { background: #e4e6e4; }
+    td.num { text-align: right; }
+    a { color: #0b4aa2; }
+    small { display: block; margin-top: 10px; color: #4a4a4a; }
+  </style>
+</head>
+<body>
+  <header>ㅁㅁ은행 Admin Console v2.3 (legacy)</header>
+  <main>
+    <section class="stats" aria-label="현황">
+      <div>전체 고객<b>2,400</b></div>
+      <div>오늘 조회<b>312</b></div>
+      <div>마지막 백업<b>2026-10-30 23:00</b></div>
+    </section>
+
+    <div class="bar">
+      <span>고객 목록 (1 / 48)</span>
+      <a href="/api/internal/export?page=1">고객 데이터 내보내기</a>
+    </div>
+    <div class="wrap-table">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">이름</th><th scope="col">전화번호</th><th scope="col">이메일</th><th scope="col">잔액</th></tr></thead>
+        <tbody>
+          <tr><td>1001</td><td>김하람</td><td>010-0000-1001</td><td>c1001@mail.example</td><td class="num">8,240,000</td></tr>
+          <tr><td>1002</td><td>이도윤</td><td>010-0000-1002</td><td>c1002@mail.example</td><td class="num">1,305,500</td></tr>
+          <tr><td>1003</td><td>박서우</td><td>010-0000-1003</td><td>c1003@mail.example</td><td class="num">27,410,000</td></tr>
+          <tr><td>1004</td><td>최지안</td><td>010-0000-1004</td><td>c1004@mail.example</td><td class="num">562,300</td></tr>
+          <tr><td>1005</td><td>정우진</td><td>010-0000-1005</td><td>c1005@mail.example</td><td class="num">14,080,000</td></tr>
+          <tr><td>1006</td><td>강민서</td><td>010-0000-1006</td><td>c1006@mail.example</td><td class="num">3,921,700</td></tr>
+          <tr><td>1007</td><td>조예준</td><td>010-0000-1007</td><td>c1007@mail.example</td><td class="num">96,500</td></tr>
+          <tr><td>1008</td><td>윤하율</td><td>010-0000-1008</td><td>c1008@mail.example</td><td class="num">6,715,000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <small>해커톤 시연용 가상 은행 시스템입니다.</small>
+  </main>
+</body>
+</html>
