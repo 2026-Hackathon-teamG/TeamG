@@ -23,6 +23,7 @@ class Event(BaseModel):
     routed_to: Literal["bank", "decoy"]
     records_out: int = 0     # 이 응답으로 나간 레코드 수
     agent_note: str | None = None   # 시연용. X-Agent-Note 헤더 값
+    internal_header: bool = False   # X-Internal-Request 헤더 포함 여부
 
 
 class Actor(BaseModel):
