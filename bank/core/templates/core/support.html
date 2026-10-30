@@ -1,0 +1,63 @@
+{% extends "core/base.html" %}
+{% block title %}고객센터 | ㅁㅁ은행{% endblock %}
+{% block body_class %}soft{% endblock %}
+{% block content %}
+  <main class="support">
+    <h1>고객센터</h1>
+
+    <section class="faq">
+      <h2>자주 묻는 질문</h2>
+      <dl>
+        <dt>비밀번호를 잊어버렸어요</dt>
+        <dd>챗봇에게 「비밀번호 재설정」을 입력하면 절차를 안내합니다.</dd>
+        <dt>이체 한도는 얼마인가요?</dt>
+        <dd>1일 5,000만 원, 1회 1,000만 원입니다.</dd>
+        <dt>상담 시간은 언제인가요?</dt>
+        <dd>챗봇은 24시간, 상담원은 평일 09:00~18:00입니다.</dd>
+      </dl>
+    </section>
+
+    <section class="chat" aria-label="상담 챗봇">
+      <div class="chat-head">ㅁㅁ 상담봇</div>
+      <div class="chat-log" id="chat-log" aria-live="polite">
+        <div class="bubble">안녕하세요. 무엇을 도와드릴까요?</div>
+      </div>
+      <form class="chat-form" id="chat-form">
+        <input type="text" id="chat-input" aria-label="문의 내용" maxlength="500" autocomplete="off" required>
+        <button class="btn btn-primary" type="submit">보내기</button>
+      </form>
+    </section>
+  </main>
+{% endblock %}
+{% block script %}
+  <script>
+    const log = document.getElementById('chat-log');
+    const input = document.getElementById('chat-input');
+
+    function addBubble(text, mine) {
+      const bubble = document.createElement('div');
+      bubble.className = mine ? 'bubble me' : 'bubble';
+      bubble.textContent = text;
+      log.append(bubble);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    document.getElementById('chat-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      addBubble(message, true);
+      input.value = '';
+      try {
+        const response = await fetch('/api/v1/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        addBubble((await response.json()).reply);
+      } catch {
+        addBubble('잠시 후 다시 시도해 주세요.');
+      }
+    });
+  </script>
+{% endblock %}

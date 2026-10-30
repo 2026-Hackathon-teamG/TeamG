@@ -1,12 +1,55 @@
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>한결은행</title>
-</head>
-<body>
-  <h1>한결은행</h1>
-  <p>가상 은행입니다. 시연용 대상 서비스.</p>
-</body>
-</html>
+{% extends "core/base.html" %}
+{% block body_class %}home{% endblock %}
+{% block content %}
+  <main class="hero">
+    <div class="wrap">
+      <div class="rise">
+        <h1>맡긴 돈은<br>제자리에.</h1>
+        <p>조회부터 이체까지 한 번에.</p>
+      </div>
+
+      <div class="stage">
+        <svg class="hero-art" viewBox="0 0 480 420" role="img" aria-label="인감이 찍힌 통장">
+          <defs>
+            <filter id="soft" x="-10%" y="-10%" width="120%" height="125%">
+              <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#050F23" flood-opacity=".55"/>
+            </filter>
+          </defs>
+
+          <path fill="#144080" fill-rule="evenodd" d="M80 16h340v340H80zM136 72v228h228V72z"/>
+
+          <g transform="rotate(-7 240 230)" filter="url(#soft)">
+            <rect x="30" y="102" width="420" height="262" rx="8" fill="#1A56B0"/>
+            <rect x="42" y="112" width="197" height="240" fill="#fff"/>
+            <rect x="241" y="112" width="197" height="240" fill="#fff"/>
+          </g>
+          <g transform="rotate(-7 240 230)" font-family="Spoqa Han Sans Neo, sans-serif" fill="#101B2D">
+            <text x="60" y="146" font-size="15" font-weight="700">보통예금 통장</text>
+            <text x="60" y="168" font-size="11" fill="#526076">ㅁㅁ은행 시연용</text>
+            <g stroke="#D8DFEA" stroke-width="1.4">
+              <path d="M60 196h160M60 228h160M60 260h160M60 292h160M60 324h160"/>
+              <path d="M259 146h160M259 178h160M259 210h160M259 242h160M259 274h160M259 306h160"/>
+            </g>
+            <g font-size="12" fill="#526076">
+              <text x="60" y="190">10.21</text><text x="220" y="190" text-anchor="end">320,000</text>
+              <text x="60" y="222">10.24</text><text x="220" y="222" text-anchor="end">48,500</text>
+              <text x="60" y="254">10.27</text><text x="220" y="254" text-anchor="end">1,200,000</text>
+              <text x="60" y="286">10.29</text><text x="220" y="286" text-anchor="end">76,300</text>
+            </g>
+          </g>
+        </svg>
+
+        {% include "core/_seal.html" with seal_class="seal" %}
+
+        <aside class="quick-box rise rise-2" aria-label="빠른 메뉴">
+          <a class="btn btn-primary" href="{% url 'login' %}">인터넷뱅킹 로그인</a>
+          <a class="btn btn-navy" href="{% url 'account' %}">계좌 조회</a>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap">© 2026 ㅁㅁ은행. 해커톤 시연을 위해 만든 가상 은행이며 실제 금융 서비스를 제공하지 않습니다.</div>
+  </footer>
+{% endblock %}

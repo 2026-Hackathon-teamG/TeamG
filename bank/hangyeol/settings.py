@@ -10,6 +10,7 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
+    "django.contrib.staticfiles",
     "core",
 ]
 
@@ -24,9 +25,11 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
-        "OPTIONS": {},
+        "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
     }
 ]
+
+STATIC_URL = "/static/"
 
 DATABASES = {
     "default": {

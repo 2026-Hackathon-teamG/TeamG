@@ -1,0 +1,24 @@
+<svg class="{{ seal_class }}" viewBox="0 0 520 520" aria-hidden="true">
+  <defs>
+    <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="7" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="7" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3" result="grain"/>
+      <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -8 5.6" result="holes"/>
+      <feComposite in="rough" in2="holes" operator="in"/>
+    </filter>
+    <mask id="carve">
+      <rect width="520" height="520" fill="#fff"/>
+      <rect x="50" y="50" width="420" height="420" fill="none" stroke="#000" stroke-width="9"/>
+      <g fill="#000" font-family="Gowun Batang, serif" font-weight="700" font-size="178" text-anchor="middle" dominant-baseline="central">
+        <text x="158" y="160">ㅁ</text>
+        <text x="362" y="160">ㅁ</text>
+        <text x="158" y="358">은</text>
+        <text x="362" y="358">행</text>
+      </g>
+    </mask>
+  </defs>
+  <g filter="url(#ink)">
+    <rect x="20" y="20" width="480" height="480" rx="26" fill="#E8112D" mask="url(#carve)"/>
+  </g>
+</svg>

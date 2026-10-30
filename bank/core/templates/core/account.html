@@ -1,0 +1,25 @@
+{% extends "core/base.html" %}
+{% block title %}내 계좌 | ㅁㅁ은행{% endblock %}
+{% block body_class %}soft{% endblock %}
+{% block content %}
+  <main class="panel">
+    <h1>내 계좌</h1>
+    <section class="balance">
+      <span>보통예금 000-0000-0000-00</span>
+      <b>12,480,000원</b>
+    </section>
+
+    <section class="tx-card">
+      <h2>최근 거래</h2>
+      <table class="tx">
+        <thead><tr><th scope="col">날짜</th><th scope="col">내용</th><th scope="col">금액</th></tr></thead>
+        <tbody>
+          <tr><td>10.29</td><td>급여</td><td class="in">+2,450,000</td></tr>
+          <tr><td>10.27</td><td>카드 대금</td><td>-480,200</td></tr>
+          <tr><td>10.24</td><td>관리비</td><td>-156,700</td></tr>
+          <tr><td>10.21</td><td>이체</td><td>-320,000</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+{% endblock %}
