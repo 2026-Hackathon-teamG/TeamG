@@ -1,4 +1,5 @@
 import os
+from http.cookiejar import DefaultCookiePolicy
 
 import httpx
 from fastapi import Request, Response
@@ -15,11 +16,26 @@ _client: httpx.AsyncClient | None = None
 async def startup() -> None:
     global _client
     _client = httpx.AsyncClient(base_url=BANK_URL, timeout=10.0)
+    # 클라이언트 하나를 모든 사용자가 공유하므로 쿠키를 저장하면 세션이 섞임.
+    # 사용자 쿠키는 요청 헤더로 그대로 넘어가니 저장소는 비워 둠
+    _client.cookies.jar.set_policy(DefaultCookiePolicy(allowed_domains=[]))
 
 
 async def shutdown() -> None:
     if _client:
         await _client.aclose()
+
+
+def _response(body: bytes, status: int, raw_headers: list[tuple[bytes, bytes]]) -> Response:
+    resp = Response(body, status_code=status)
+    # Set-Cookie처럼 같은 이름이 여러 번 오는 헤더를 합치지 않도록 raw로 붙임
+    resp.raw_headers.extend((k, v) for k, v in raw_headers if k.decode().lower() not in _SKIP)
+    return resp
+
+
+def replace_body(resp: Response, body: bytes) -> Response:
+    """미끼 주입용. 헤더는 유지하고 본문과 길이만 바꿈."""
+    return _response(body, resp.status_code, resp.raw_headers)
 
 
 async def forward(request: Request) -> Response:
@@ -35,5 +51,4 @@ async def forward(request: Request) -> Response:
         )
     except httpx.HTTPError:
         return Response("bad gateway", status_code=502)
-    out_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _SKIP}
-    return Response(upstream.content, status_code=upstream.status_code, headers=out_headers)
+    return _response(upstream.content, upstream.status_code, upstream.headers.raw)
