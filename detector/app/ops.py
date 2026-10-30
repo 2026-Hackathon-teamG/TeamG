@@ -49,7 +49,7 @@ async def stream(ws: WebSocket):
 
 
 @router.get("/events")
-async def events(since: datetime | None = None, limit: int = Query(200, ge=1, le=1000)):
+async def events(since: datetime | None = None, limit: int = Query(100, ge=1, le=1000)):
     return await db.list_events(since, limit)
 
 
