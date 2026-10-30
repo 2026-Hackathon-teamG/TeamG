@@ -24,6 +24,8 @@ class Event(BaseModel):
     records_out: int = 0     # 이 응답으로 나간 레코드 수
     agent_note: str | None = None   # 시연용. X-Agent-Note 헤더 값
     internal_header: bool = False   # X-Internal-Request 헤더 포함 여부
+    login_result: Literal["success", "fail"] | None = None  # 로그인 시도 결과 (gateway가 bank 응답 헤더에서 읽음)
+    account: str | None = None      # 로그인 등 시도 대상 계정
 
 
 class Actor(BaseModel):
