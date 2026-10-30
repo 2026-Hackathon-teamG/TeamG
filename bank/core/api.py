@@ -1,4 +1,5 @@
 """한결은행 공개 API. 시연용 취약점을 일부러 남겨 둔 곳."""
+import hmac
 import json
 
 from django.http import HttpResponse, JsonResponse
@@ -7,8 +8,22 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import Customer
 
-# 시연용 계정. bank-ui 목업(src/mock.ts)과 같은 값
-DEMO_USERS = {"demo": "demo1234"}
+# 시연용 계정. demo는 bank-ui 목업(src/mock.ts)과 같은 값, 나머지는 R3~R6 시나리오용 가짜 계정
+DEMO_USERS = {
+    "demo": "demo1234",
+    "admin": "admin123",
+    "kim.j": "qwerty",
+    "lee.s": "Spring2026!",
+    "park.h": "password1",
+    "choi.m": "1q2w3e4r",
+}
+_DUMMY_PW = "*" * 16   # 존재하지 않는 계정도 같은 비용으로 비교(R3 타이밍 균일화)
+
+
+def _password_ok(username: str, password: str) -> bool:
+    # R3: 계정 존재 여부와 무관하게 같은 경로로 비교해, 타이밍으로 계정 유무가 새지 않게 한다
+    expected = DEMO_USERS.get(username, _DUMMY_PW)
+    return hmac.compare_digest(expected, password) and username in DEMO_USERS
 
 # 챗봇의 내부 지시문. 인젝션 문구에 그대로 새어 나가는 것이 시연용 취약점
 CHAT_SYSTEM_PROMPT = (
@@ -56,13 +71,23 @@ def login(request):
     if data is None:
         return _json({"error": "bad_request", "message": "JSON 본문이 필요합니다."}, status=400)
     username = str(data.get("username", ""))
-    if not username or DEMO_USERS.get(username) != str(data.get("password", "")):
+    # R3: 없는 계정이든 비번이 틀렸든 완전히 같은 응답(문구·상태). 계정 열거 무력화
+    if not _password_ok(username, str(data.get("password", ""))):
         return _login_result(
             _json({"error": "unauthorized", "message": "아이디 또는 비밀번호가 맞지 않습니다."}, status=401),
             "fail", username)
     request.session.cycle_key()
     request.session["user"] = username
     return _login_result(_json({"user": username}), "success", username)
+
+
+@require_POST
+def password_reset(request):
+    data = _body(request)
+    if data is None:
+        return _json({"error": "bad_request", "message": "JSON 본문이 필요합니다."}, status=400)
+    # R3: 계정이 있든 없든 항상 같은 응답. 재설정 경로로도 계정을 열거할 수 없게 한다
+    return _json({"message": "입력하신 계정이 존재하면 재설정 안내를 등록된 연락처로 보냈습니다."})
 
 
 def _login_result(resp, result: str, account: str):

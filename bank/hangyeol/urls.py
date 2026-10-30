@@ -10,5 +10,6 @@ urlpatterns = [
     path("api/v1/docs", api.docs, name="api_docs"),
     path("api/v1/customers", api.customers, name="customers"),
     path("api/v1/login", api.login, name="login"),
+    path("api/v1/password-reset", api.password_reset, name="password_reset"),
     path("api/v1/chat", api.chat, name="chat"),
 ]
