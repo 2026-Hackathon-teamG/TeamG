@@ -70,7 +70,7 @@ async def health(c: httpx.AsyncClient) -> None:
         except httpx.HTTPError as e:
             check(f"헬스: {name}", False, e.__class__.__name__)
     r = await c.get(f"{GW}/")
-    check("헬스: gateway → bank 메인", r.status_code == 200 and "한결은행" in r.text, str(r.status_code))
+    check("헬스: gateway → bank 메인", r.status_code == 200 and "ㅁㅁ은행" in r.text, str(r.status_code))
 
 
 # ---------- 2. bank 계약 ----------
