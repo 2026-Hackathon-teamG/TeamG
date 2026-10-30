@@ -24,6 +24,7 @@ DEMO_USERS = {
 STEPUP_ENABLED = os.environ.get("STEPUP_ENABLED") == "1"
 STEPUP_CODE = "000000"   # 시연용 고정 코드
 _KNOWN_DEVICES: dict[str, set[str]] = {}   # account -> 인증 마친 기기 id들 (메모리, 데모용)
+_MFA_PENDING: dict[str, str] = {}          # R6: MFA request_id -> account (메모리, 데모용)
 
 # 챗봇의 내부 지시문. 인젝션 문구에 그대로 새어 나가는 것이 시연용 취약점
 CHAT_SYSTEM_PROMPT = (
@@ -106,6 +107,36 @@ def login_verify(request):
     request.session["user"] = account
     resp = _login_result(_json({"user": account}), "success", account)
     resp.set_cookie("did", device, max_age=60 * 60 * 24 * 30, httponly=True, samesite="Lax")
+    return resp
+
+
+@require_POST
+def mfa_request(request):
+    """R6 MFA 푸시 요청. 로그인 세션(탈취 세션 포함)이 있으면 계정 소유자에게 승인 요청을 보낸다."""
+    account = request.session.get("user")
+    if not account:
+        return _json({"error": "unauthorized", "message": "로그인이 필요합니다."}, status=401)
+    request_id = secrets.token_hex(6)
+    _MFA_PENDING[request_id] = account
+    return _mfa_result(_json({"request_id": request_id, "message": "등록된 기기로 승인 요청을 보냈습니다."}),
+                       "request", account)
+
+
+@require_POST
+def mfa_approve(request):
+    """R6 MFA 승인. 시연에서는 사용자가 피로감에 승인 버튼을 누른 것을 이 호출로 흉내 낸다.
+    번호 일치(number matching)는 gateway가 numbermatch 플래그를 보고 이 앞에서 막는다."""
+    data = _body(request) or {}
+    account = _MFA_PENDING.pop(str(data.get("request_id", "")), None)
+    if not account:
+        return _json({"error": "not_found", "message": "진행 중인 승인 요청이 없습니다."}, status=404)
+    return _mfa_result(_json({"approved": True, "user": account}), "approve", account)
+
+
+def _mfa_result(resp, action: str, account: str):
+    # gateway가 이 헤더로 MFA 요청/승인과 대상 계정을 읽어 R6 채점에 쓴다
+    resp["X-Mfa-Action"] = action
+    resp["X-Login-Account"] = account
     return resp
 
 
