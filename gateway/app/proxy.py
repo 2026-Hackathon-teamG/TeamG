@@ -28,8 +28,10 @@ async def shutdown() -> None:
 
 def _response(body: bytes, status: int, raw_headers: list[tuple[bytes, bytes]]) -> Response:
     resp = Response(body, status_code=status)
-    # Set-Cookie처럼 같은 이름이 여러 번 오는 헤더를 합치지 않도록 raw로 붙임
-    resp.raw_headers.extend((k, v) for k, v in raw_headers if k.decode().lower() not in _SKIP)
+    # Set-Cookie처럼 같은 이름이 여러 번 오는 헤더를 합치지 않도록 raw로 붙임.
+    # 이름은 소문자로 정규화한다. bank(Django)는 X-Login-Result 같은 혼용 대소문자를 보내는데,
+    # starlette 헤더 조회는 소문자 기준이라 그대로 두면 gateway 내부 .get()이 못 찾는다.
+    resp.raw_headers.extend((k.lower(), v) for k, v in raw_headers if k.decode().lower() not in _SKIP)
     return resp
 
 
