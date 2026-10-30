@@ -142,13 +142,15 @@ def test_issue_completion_scenario_quarantines_as_a01(world):
     assert sent[0][1]["id"] == "A-01"
 
 
-def test_later_session_and_token_join_quarantine(world):
+def test_later_session_and_token_join_quarantine(monkeypatch, world):
     _, saved, keys, sent = world
+    monkeypatch.setattr(scoring.linking, "TOKEN_SECRET", "secret")
+    token = f"pt_A-01_1_{scoring.linking.sign('A-01', 1)}"
     run(make_event("/admin-legacy", decoy_id="admin_legacy"))
-    run(make_event("/", session_id="s1", token="pt_x", seconds=1))
-    assert keys == {f"quarantine:ip:{IP}": "A-01", "quarantine:session:s1": "A-01", "quarantine:token:pt_x": "A-01"}
+    run(make_event("/", session_id="s1", token=token, seconds=1))
+    assert keys == {f"quarantine:ip:{IP}": "A-01", "quarantine:session:s1": "A-01", f"quarantine:token:{token}": "A-01"}
     assert len(sent) == 2
-    run(make_event("/", session_id="s1", token="pt_x", seconds=2))
+    run(make_event("/", session_id="s1", token=token, seconds=2))
     assert len(sent) == 2       # 바뀐 게 없으면 다시 보내지 않음
     assert [a.id for a, _ in saved] == ["A-01"] * 3
 
