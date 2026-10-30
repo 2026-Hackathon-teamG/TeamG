@@ -56,6 +56,7 @@ def build(
     records_out: int = 0,
     login_result: str | None = None,
     account: str | None = None,
+    mfa_action: str | None = None,
 ) -> Event:
     path = request.url.path
     if request.url.query:
@@ -79,6 +80,7 @@ def build(
         internal_header="x-internal-request" in request.headers,
         login_result=login_result,
         account=account,
+        mfa_action=mfa_action,
     )
 
 
