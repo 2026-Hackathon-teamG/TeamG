@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from shared import Actor, Event
 
+from app import worker
 from app.main import app as detector_app
 from app.stream import StreamHub, hub, ops_stream, router
 
@@ -88,6 +89,61 @@ def test_한_연결이_끊겨도_다른_연결로_계속_보낸다(client):
         assert remaining.receive_json() == {"type": "stats", "data": {"real_leaks": 1}}
 
     wait_for_client_count(client, 0)
+
+
+class FakeRedis:
+    def __init__(self):
+        self.acked = []
+
+    async def xack(self, stream_name, group, *ids):
+        self.acked.extend(ids)
+
+
+def stream_entry(event: Event) -> tuple[bytes, dict[bytes, bytes]]:
+    return b"1-0", {b"data": event.model_dump_json().encode()}
+
+
+def test_워커가_저장한_이벤트를_스트림으로_보낸다(monkeypatch):
+    saved = []
+
+    async def insert_events(events):
+        saved.extend(events)
+
+    monkeypatch.setattr(worker.db, "insert_events", insert_events)
+
+    async def scenario():
+        queue = hub.subscribe()
+        try:
+            redis_client = FakeRedis()
+            await worker.handle(redis_client, [stream_entry(make_event())])
+            return queue.get_nowait(), redis_client.acked
+        finally:
+            hub.unsubscribe(queue)
+
+    message, acked = asyncio.run(scenario())
+
+    assert [event.id for event in saved] == ["evt_01"]
+    assert message["type"] == "event"
+    assert message["data"]["id"] == "evt_01"
+    assert acked == [b"1-0"]
+
+
+def test_저장에_실패하면_보내지_않는다(monkeypatch):
+    async def insert_events(events):
+        raise RuntimeError("저장 실패")
+
+    monkeypatch.setattr(worker.db, "insert_events", insert_events)
+
+    async def scenario():
+        queue = hub.subscribe()
+        try:
+            with pytest.raises(RuntimeError):
+                await worker.handle(FakeRedis(), [stream_entry(make_event())])
+            return queue.qsize()
+        finally:
+            hub.unsubscribe(queue)
+
+    assert asyncio.run(scenario()) == 0
 
 
 def test_큐가_가득_차도_막히지_않고_오래된_메시지를_버린다():

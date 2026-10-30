@@ -7,7 +7,7 @@ from redis.exceptions import ResponseError
 
 from shared import Event
 
-from . import db
+from . import db, stream
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ async def handle(r: aioredis.Redis, entries: list) -> None:
             log.exception("bad event %s, skipped", msg_id)
     if events:
         await db.insert_events(events)
+        for event in events:
+            stream.hub.publish_event(event)
     # 다음 단계(점수, 묶음)는 여기서 events를 넘겨받아 처리
     if ids:
         await r.xack(STREAM, GROUP, *ids)
